@@ -5,16 +5,19 @@
 #
 # Copyright (C) 2020 KFERMercer
 #
-name: OpenWrt-CI
+name: Build and Push Docker Image
 
 on:
-  schedule:
-    - cron: 0 20 * * *
-  release:
-    types: [published]
+  push:
+    branches:
+      - master
+  #schedule:
+  # - cron: 0 20 * * *
+  #release:
+  #  types: [published]
     
-permissions:
-  contents: read
+#permissions:
+#  contents: read
 
 jobs:
 
@@ -25,7 +28,7 @@ jobs:
 
     name: Build OpenWrt firmware
 
-    runs-on: ubuntu-latest
+    runs-on: arm64-ubuntu-latest
 
     if: github.event.repository.owner.id == github.event.sender.id || ! github.event.sender.id
 
@@ -34,7 +37,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
         with:
-          ref: master
+          ref: master 
 
       - name: Space cleanup
         env:
@@ -50,6 +53,29 @@ jobs:
 
           df -h
 
+      - name: 同步最新的源码
+        run: |
+          git remote add openwrt https://github.com/coolsnowwolf/lede.git
+          git pull openwrt master
+          git remote -v
+
+      - name: Build the Docker image
+        run: |
+          docker build -t my-image .
+
+      - name: Push the Docker image
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+          docker push my-image
+
+      #自定义软件包，可以在github搜索
+      #- name: 涡轮增雕进程
+      #  run: |
+      #    cd package
+      #    mkdir openwrt-packages
+      #    cd openwrt-packages
+      #    git clone https://github.com/openwrt-develop/luci-theme-atmaterial.git
+
       - name: Update feeds
         run: |
           sed -i 's/#src-git helloworld/src-git helloworld/g' ./feeds.conf.default
@@ -57,7 +83,142 @@ jobs:
           ./scripts/feeds install -a
 
       - name: Generate configuration file
-        run: make defconfig
+        run: |
+          rm -f ./.config*
+          touch ./.config
+
+          #
+          # ========================固件定制部分========================
+          # 
+
+          # 编译x64固件:
+          # cat >> .config <<EOF
+          # CONFIG_TARGET_x86=y
+          # CONFIG_TARGET_x86_64=y
+          # CONFIG_TARGET_x86_64_Generic=y
+          # EOF
+
+          #编译ARM64固件:
+          cat >> .config <<EOF
+          CONFIG_TARGET_arm64=y
+          CONFIG_TARGET_arm64_cortex-a53=y
+          EOF
+          #ARM64另一种写法
+          #cat >> .config <<EOF
+          #CONFIG_TARGET_armvirt=y
+          #CONFIG_TARGET_armvirt_64=y
+          #CONFIG_TARGET_armvirt_64_Default=y
+          #EOF
+
+          # 固件压缩:
+           cat >> .config <<EOF
+           CONFIG_TARGET_IMAGES_GZIP=y
+           EOF
+
+          # 编译UEFI固件:
+           cat >> .config <<EOF
+           CONFIG_EFI_IMAGES=y
+           EOF
+
+          # IPv6支持:
+          # cat >> .config <<EOF
+          # CONFIG_PACKAGE_dnsmasq_full_dhcpv6=y
+          # CONFIG_PACKAGE_ipv6helper=y
+          # EOF
+
+          # 多文件系统支持:
+           cat >> .config <<EOF
+           CONFIG_PACKAGE_kmod-fs-nfs=y
+           CONFIG_PACKAGE_kmod-fs-nfs-common=y
+           CONFIG_PACKAGE_kmod-fs-nfs-v3=y
+           CONFIG_PACKAGE_kmod-fs-nfs-v4=y
+           CONFIG_PACKAGE_kmod-fs-ntfs=y
+           CONFIG_PACKAGE_kmod-fs-squashfs=y
+           EOF
+
+          # USB3.0支持:
+          # cat >> .config <<EOF
+          # CONFIG_PACKAGE_kmod-usb-ohci=y
+          # CONFIG_PACKAGE_kmod-usb-ohci-pci=y
+          # CONFIG_PACKAGE_kmod-usb2=y
+          # CONFIG_PACKAGE_kmod-usb2-pci=y
+          # CONFIG_PACKAGE_kmod-usb3=y
+          # EOF
+
+          # 常用LuCI插件选择:
+          cat >> .config <<EOF
+          # CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Shadowsocks=y
+          # CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_ShadowsocksR_Server=y
+          # CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_ShadowsocksR_Socks=y
+          # CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_V2ray=y
+          # CONFIG_PACKAGE_luci-app-v2ray-server=y
+          # CONFIG_PACKAGE_luci-app-verysync=y
+          # CONFIG_PACKAGE_luci-app-wireguard=y
+          #CONFIG_PACKAGE_luci-app-wrtbwmon=y
+          CONFIG_PACKAGE_luci-i18n-base-en=y
+          CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+          CONFIG_PACKAGE_luci-app-adbyby-plus=y
+          CONFIG_PACKAGE_luci-app-aria2=y
+          CONFIG_PACKAGE_luci-app-baidupcs-web=y
+          CONFIG_PACKAGE_luci-app-docker=y
+          CONFIG_PACKAGE_luci-app-frpc=y
+          CONFIG_PACKAGE_luci-app-kodexplorer=y
+          CONFIG_PACKAGE_luci-app-minidlna=y
+          CONFIG_PACKAGE_luci-app-openvpn=y
+          CONFIG_PACKAGE_luci-app-openvpn-server=y
+          CONFIG_PACKAGE_luci-app-qbittorrent=y
+          CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_Kcptun=y
+          CONFIG_PACKAGE_luci-app-ttyd=y
+          CONFIG_PACKAGE_luci-app-webadmin=y
+          CONFIG_PACKAGE_luci-app-openclash=y
+          CONFIG_PACKAGE_luci-app-aliyundrive-webdav=y
+          CONFIG_PACKAGE_luci-app-aliyundrive-webdav=y
+          CONFIG_PACKAGE_luci-app-ddns=y
+          CONFIG_PACKAGE_luci-app-diskman=y
+          CONFIG_PACKAGE_luci-app-filetransfer=y
+          CONFIG_PACKAGE_luci-app-firewall=y
+          CONFIG_PACKAGE_luci-app-frpc=y
+          CONFIG_PACKAGE_luci-app-frps=y
+          CONFIG_PACKAGE_luci-app-netdata=y
+          CONFIG_PACKAGE_luci-app-ramfree=y
+          CONFIG_PACKAGE_luci-app-samba4=y
+          CONFIG_PACKAGE_luci-app-vlmcsd=y
+          CONFIG_PACKAGE_luci-app-store=y
+          CONFIG_PACKAGE_luci-app-rclone=y
+          EOF
+
+          # LuCI主题:
+           cat >> .config <<EOF
+           CONFIG_PACKAGE_luci-theme-argon=y
+           CONFIG_PACKAGE_luci-theme-netgear=y
+           CONFIG_PACKAGE_luci-theme-edge=y
+           CONFIG_PACKAGE_luci-theme-openwrt2020=y
+           EOF
+
+          # 常用软件包:
+           cat >> .config <<EOF
+           CONFIG_PACKAGE_curl=y
+           CONFIG_PACKAGE_htop=y
+           CONFIG_PACKAGE_nano=y
+           CONFIG_PACKAGE_screen=y
+           CONFIG_PACKAGE_tree=y
+           CONFIG_PACKAGE_vim-fuller=y
+           CONFIG_PACKAGE_wget=y
+           EOF
+
+          # 取消编译VMware镜像以及镜像填充 (不要删除被缩进的注释符号):
+          # cat >> .config <<EOF
+          # # CONFIG_TARGET_IMAGES_PAD is not set
+          # # CONFIG_VMDK_IMAGES is not set
+          # EOF
+
+          # 
+          # ========================固件定制部分结束========================
+          # 
+
+
+          sed -i 's/^[ \t]*//g' ./.config
+          make defconfig
 
       - name: Make download
         run: |
