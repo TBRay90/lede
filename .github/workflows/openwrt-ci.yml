@@ -28,7 +28,7 @@ jobs:
 
     name: Build OpenWrt firmware
 
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
 
     if: github.event.repository.owner.id == github.event.sender.id || ! github.event.sender.id
 
@@ -52,15 +52,6 @@ jobs:
           sudo -E apt-get clean
 
           df -h
-
-      - name: Build the Docker image
-        run: |
-          docker build -t my-image .
-
-      - name: Push the Docker image
-        run: |
-          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-          docker push my-image
 
       #自定义软件包，可以在github搜索
       #- name: 涡轮增雕进程
